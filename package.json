@@ -3,7 +3,7 @@
   "version": "0.0.1",
   "description": "A fifo lock using redis and nestjs",
   "author": "Reza Baiat",
-  "private": true,
+  "private": false,
   "license": "UNLICENSED",
   "files": ["./dist/*","package.json","package-lock.json"],
   "scripts": {
