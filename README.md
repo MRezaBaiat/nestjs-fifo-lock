@@ -33,7 +33,7 @@ and then simply add a decorator to absolutely any async function you wish
 ```bash
 import { UseLock } from 'nestjs-fifo-lock';
 
-//simple way
+//single lock
 
 @UseLock(({field1})=>({type :'general',tag: field1.id}))
 async function doSmtSerious(data:{field1}){
