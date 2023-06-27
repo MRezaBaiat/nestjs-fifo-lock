@@ -1,11 +1,11 @@
 {
   "name": "nestjs-fifo-lock",
-  "version": "0.0.1",
+  "version": "0.0.2",
   "description": "A fifo lock using redis and nestjs",
   "author": "Reza Baiat",
   "private": false,
   "license": "UNLICENSED",
-  "files": ["./dist/*","package.json","package-lock.json"],
+  "files": ["./dist/**","package.json","package-lock.json"],
   "scripts": {
     "delete-dist": "if exist \"./dist*\" Rmdir /S /Q \"./dist\"",
     "generate-dist": "yarn delete-dist && tsc --p ./tsconfig.json --declaration --declarationDir dist --outDir dist --pretty"
