@@ -6,7 +6,15 @@
   "private": false,
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
-  "license": "UNLICENSED",
+  "license": "ISC",
+  "homepage": "https://github.com/MRezaBaiat/nestjs-fifo-lock#readme",
+  "bugs": {
+    "url": "https://github.com/MRezaBaiat/nestjs-fifo-lock/issues"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/MRezaBaiat/nestjs-fifo-lock.git"
+  },
   "files": [
     "dist",
     "package.json",
