@@ -29,6 +29,46 @@ let LockModule = exports.LockModule = LockModule_1 = class LockModule {
             exports: [lock_service_1.LockService],
         };
     }
+    static registerAsync(options) {
+        const providers = this.createAsyncProviders(options);
+        return {
+            global: true,
+            module: LockModule_1,
+            imports: options.imports || [],
+            providers: [
+                ...providers,
+                {
+                    provide: lock_service_1.LockService,
+                    useFactory: (config) => new lock_service_1.LockService(config),
+                    inject: ['LOCK_MODULE_CONFIG'],
+                },
+            ],
+            exports: [lock_service_1.LockService],
+        };
+    }
+    static createAsyncProviders(options) {
+        if (options.useFactory) {
+            return [
+                {
+                    provide: 'LOCK_MODULE_CONFIG',
+                    useFactory: options.useFactory,
+                    inject: options.inject || [],
+                },
+            ];
+        }
+        const useClass = options.useClass || options.useExisting;
+        if (useClass) {
+            return [
+                {
+                    provide: 'LOCK_MODULE_CONFIG',
+                    useFactory: async (optionsFactory) => await optionsFactory.createLockOptions(),
+                    inject: [useClass],
+                },
+                useClass,
+            ];
+        }
+        throw new Error('Invalid LockModuleAsyncOptions');
+    }
 };
 exports.LockModule = LockModule = LockModule_1 = __decorate([
     (0, common_1.Global)(),

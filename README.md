@@ -61,13 +61,14 @@ Please note if using on multiple server instances connected to the same redis in
 
 ## Params
 
-| Project                | requirement                                 | Description                                                                  |
-|------------------------|---------------------------------------------|------------------------------------------------------------------------------|
-| redisHost              | required                                    | Redis's address                                                              |
-| redisPort              | required                                    | Redis's port                                                                 |
-| lockMaxTTL             | optional , defaulted to 600000 milliseconds | The time it takes before the internal healthcheck's sweeper deletes the lock |
-| healthCheckInterval    | optional, defaulted to 600000 milliseconds  | The interval for how often the healthcheck should run                        |
-| lockAcquireInterval  | [ optional , default to 500 milliseconds    | The interval for how often a lock in queue should check to see if it's turn  |
+| Project             | requirement                                 | Description                                                                  |
+|---------------------|---------------------------------------------|------------------------------------------------------------------------------|
+| redisHost           | required                                    | Redis's address                                                              |
+| redisPort           | required                                    | Redis's port                                                                 |
+| lockMaxTTL          | optional , defaulted to 600000 milliseconds | The time it takes before the internal healthcheck's sweeper deletes the lock |
+| healthCheckInterval | optional, defaulted to 600000 milliseconds  | The interval for how often the healthcheck should run                        |
+| lockAcquireInterval | [ optional , default to 500 milliseconds    | The interval for how often a lock in queue should check to see if it's turn  |
+| maxExtensions        | [ optional , default to 5     | How many times can an acquired lock extend after lockMaxTTL is reached       |
 
 ## Credits
 

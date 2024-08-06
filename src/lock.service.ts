@@ -5,7 +5,7 @@ import {
 } from '@nestjs/common';
 import Client from 'ioredis';
 import { randomUUID } from 'crypto';
-import _ from 'lodash';
+import { uniq } from 'lodash';
 import { ConfigType } from './lock.module';
 
 declare global {
@@ -47,7 +47,7 @@ export class LockService
     lockTags: string | string[],
     cb: () => Promise<T>,
   ): Promise<T> {
-    const tags = _.uniq(
+    const tags = uniq(
       typeof lockTags === 'string'
         ? [lockTags]
         : Array.isArray(lockTags)

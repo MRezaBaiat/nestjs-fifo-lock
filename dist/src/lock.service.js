@@ -28,7 +28,7 @@ let LockService = exports.LockService = class LockService {
         this.runHealthCheck();
     }
     async auto(lockTags, cb) {
-        const tags = lodash_1.default.uniq(typeof lockTags === 'string'
+        const tags = (0, lodash_1.uniq)(typeof lockTags === 'string'
             ? [lockTags]
             : Array.isArray(lockTags)
                 ? lockTags.map((t) => String(t))
