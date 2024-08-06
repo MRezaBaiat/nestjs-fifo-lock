@@ -22,7 +22,7 @@ imports:[{
     redisPort: 6379,
     lockMaxTTL: 60000,
     healthCheckInterval: 60000,
-    lockAcquireInterval: 500
+    lockAcquireInterval: 500,
     maxExtensions: 5
   })
   ...
