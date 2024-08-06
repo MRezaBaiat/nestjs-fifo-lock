@@ -1,17 +1,13 @@
 import { OnApplicationShutdown, OnApplicationBootstrap } from '@nestjs/common';
+import { ConfigType } from './lock.module';
 declare global {
     var lockService: LockService;
 }
 export declare class LockService implements OnApplicationBootstrap, OnApplicationShutdown {
     private config;
     private readonly client;
-    constructor(config: {
-        redisHost: string;
-        redisPort: string | number;
-        lockMaxTTL?: number;
-        healthCheckInterval?: number;
-        lockAcquireInterval?: number;
-    });
+    private healthCheckIntervalId;
+    constructor(config: ConfigType);
     onApplicationBootstrap(): any;
     auto<T>(lockTags: string | string[], cb: () => Promise<T>): Promise<T>;
     private encodeValue;
@@ -21,6 +17,7 @@ export declare class LockService implements OnApplicationBootstrap, OnApplicatio
     private generateListKey;
     private getAllLists;
     private deleteLocks;
+    private extendLocks;
     private getWriteLockWithPriority;
     onApplicationShutdown(): Promise<any>;
 }

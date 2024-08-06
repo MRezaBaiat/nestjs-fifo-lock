@@ -15,6 +15,7 @@ let LockModule = exports.LockModule = LockModule_1 = class LockModule {
         config.lockMaxTTL = config.lockMaxTTL || 60 * 1000;
         config.healthCheckInterval = config.healthCheckInterval || 60 * 1000;
         config.lockAcquireInterval = config.lockAcquireInterval || 500;
+        config.maxExtensions = config.maxExtensions || 5;
         return {
             global: true,
             imports: [],

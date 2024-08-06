@@ -13,6 +13,7 @@ exports.LockService = void 0;
 const common_1 = require("@nestjs/common");
 const ioredis_1 = require("ioredis");
 const crypto_1 = require("crypto");
+const lodash_1 = require("lodash");
 let LockService = exports.LockService = class LockService {
     constructor(config) {
         this.config = config;
@@ -23,17 +24,22 @@ let LockService = exports.LockService = class LockService {
         });
     }
     onApplicationBootstrap() {
-        setInterval(() => this.runHealthCheck(), this.config.healthCheckInterval);
+        this.healthCheckIntervalId = setInterval(() => this.runHealthCheck(), this.config.healthCheckInterval);
         this.runHealthCheck();
     }
     async auto(lockTags, cb) {
-        const tags = typeof lockTags === 'string'
+        const tags = lodash_1.default.uniq(typeof lockTags === 'string'
             ? [lockTags]
             : Array.isArray(lockTags)
                 ? lockTags.map((t) => String(t))
-                : [String(lockTags)];
-        const { remove } = await this.getWriteLockWithPriority(tags);
-        return cb().finally(remove);
+                : [String(lockTags)]);
+        const { release } = await this.getWriteLockWithPriority(tags);
+        try {
+            return await cb();
+        }
+        finally {
+            await release();
+        }
     }
     encodeValue(data) {
         return JSON.stringify(data);
@@ -44,8 +50,8 @@ let LockService = exports.LockService = class LockService {
     async fetchIndexes(values) {
         const res = [];
         for (const val of values) {
-            const setKey = this.generateListKey(this.decodeValue(val).tag);
-            res.push(await this.client.lpos(setKey, val));
+            const listKey = this.generateListKey(this.decodeValue(val).tag);
+            res.push(await this.client.lpos(listKey, val));
         }
         return res;
     }
@@ -56,7 +62,7 @@ let LockService = exports.LockService = class LockService {
             const list = await this.client.lrange(listKey, 0, -1);
             for (const listVal of list) {
                 const value = this.decodeValue(listVal);
-                if (now - value.createdAt >= this.config.lockMaxTTL) {
+                if (now - value.date >= this.config.lockMaxTTL) {
                     await this.deleteLocks([listVal]);
                 }
             }
@@ -72,16 +78,35 @@ let LockService = exports.LockService = class LockService {
         for (const listVal of values) {
             const value = this.decodeValue(listVal);
             const listKey = this.generateListKey(value.tag);
-            await this.client.lrem(listKey, 1, listVal);
+            await this.client.lrem(listKey, 0, listVal);
         }
     }
+    async extendLocks(values) {
+        values = [...values];
+        for (const val of values) {
+            const listKey = this.generateListKey(this.decodeValue(val).tag);
+            const index = await this.client.lpos(listKey, val);
+            if (index === null) {
+                throw new Error(`Error when trying to get lock which request got deleted when trying to extend lock`);
+            }
+            const value = this.decodeValue(val);
+            if (value.extensions < this.config.maxExtensions) {
+                value.date = Date.now();
+                value.extensions += 1;
+                values.splice(values.indexOf(val), 1, this.encodeValue(value));
+                await this.client.lset(listKey, index, this.encodeValue(value));
+            }
+        }
+        return values;
+    }
     async getWriteLockWithPriority(tags) {
-        const values = [];
+        let values = [];
         for (const tag of tags) {
             const value = this.encodeValue({
                 tag,
-                createdAt: Date.now(),
+                date: Date.now(),
                 clientToken: (0, crypto_1.randomUUID)(),
+                extensions: 0,
             });
             await this.client.rpush(this.generateListKey(tag), value);
             values.push(value);
@@ -94,13 +119,27 @@ let LockService = exports.LockService = class LockService {
             if (!indexes.some((i) => i !== 0)) {
                 break;
             }
-            await new Promise((resolve) => setTimeout(resolve, this.config.lockAcquireInterval));
+            await sleep(this.config.lockAcquireInterval);
         }
+        values = await this.extendLocks(values);
+        const extender = setInterval(async () => {
+            try {
+                values = await this.extendLocks(values);
+            }
+            catch (e) {
+                clearInterval(extender);
+            }
+        }, this.config.lockMaxTTL / 2);
         return {
-            remove: async () => this.deleteLocks(values),
+            release: () => {
+                clearInterval(extender);
+                return this.deleteLocks(values);
+            },
         };
     }
     async onApplicationShutdown() {
+        if (this.healthCheckIntervalId != null)
+            clearInterval(this.healthCheckIntervalId);
         return this.client.quit();
     }
 };
@@ -108,3 +147,8 @@ exports.LockService = LockService = __decorate([
     (0, common_1.Injectable)(),
     __metadata("design:paramtypes", [Object])
 ], LockService);
+async function sleep(milliseconds) {
+    await new Promise((resolve) => {
+        setTimeout(resolve, milliseconds);
+    });
+}

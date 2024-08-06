@@ -1,4 +1,4 @@
-type LockType = {
+export type LockType = {
   type: string;
   tag: string;
 };

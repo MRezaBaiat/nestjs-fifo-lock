@@ -5,29 +5,29 @@ import {
 } from '@nestjs/common';
 import Client from 'ioredis';
 import { randomUUID } from 'crypto';
+import _ from 'lodash';
+import { ConfigType } from './lock.module';
 
 declare global {
   // eslint-disable-next-line no-var, vars-on-top, no-use-before-define
   var lockService: LockService;
 }
 
-type ValueType = { tag: string; createdAt: number; clientToken: string };
+type ValueType = {
+  tag: string;
+  date: number;
+  clientToken: string;
+  extensions: number;
+};
 
 @Injectable()
 export class LockService
   implements OnApplicationBootstrap, OnApplicationShutdown
 {
   private readonly client;
+  private healthCheckIntervalId;
 
-  constructor(
-    private config: {
-      redisHost: string;
-      redisPort: string | number;
-      lockMaxTTL?: number;
-      healthCheckInterval?: number;
-      lockAcquireInterval?: number;
-    },
-  ) {
+  constructor(private config: ConfigType) {
     global.lockService = this;
     this.client = new Client({
       host: config.redisHost,
@@ -36,7 +36,10 @@ export class LockService
   }
 
   onApplicationBootstrap(): any {
-    setInterval(() => this.runHealthCheck(), this.config.healthCheckInterval);
+    this.healthCheckIntervalId = setInterval(
+      () => this.runHealthCheck(),
+      this.config.healthCheckInterval,
+    );
     this.runHealthCheck();
   }
 
@@ -44,16 +47,21 @@ export class LockService
     lockTags: string | string[],
     cb: () => Promise<T>,
   ): Promise<T> {
-    const tags =
+    const tags = _.uniq(
       typeof lockTags === 'string'
         ? [lockTags]
         : Array.isArray(lockTags)
         ? lockTags.map((t) => String(t))
-        : [String(lockTags)];
+        : [String(lockTags)],
+    );
 
-    const { remove } = await this.getWriteLockWithPriority(tags);
+    const { release } = await this.getWriteLockWithPriority(tags);
 
-    return cb().finally(remove);
+    try {
+      return await cb();
+    } finally {
+      await release();
+    }
   }
 
   private encodeValue(data: ValueType): string {
@@ -67,8 +75,8 @@ export class LockService
   private async fetchIndexes(values: string[]) {
     const res: number[] = [];
     for (const val of values) {
-      const setKey = this.generateListKey(this.decodeValue(val).tag);
-      res.push(await this.client.lpos(setKey, val));
+      const listKey = this.generateListKey(this.decodeValue(val).tag);
+      res.push(await this.client.lpos(listKey, val));
     }
     return res;
   }
@@ -80,7 +88,7 @@ export class LockService
       const list = await this.client.lrange(listKey, 0, -1);
       for (const listVal of list) {
         const value = this.decodeValue(listVal);
-        if (now - value.createdAt >= this.config.lockMaxTTL) {
+        if (now - value.date >= this.config.lockMaxTTL) {
           await this.deleteLocks([listVal]);
         }
       }
@@ -99,17 +107,39 @@ export class LockService
     for (const listVal of values) {
       const value = this.decodeValue(listVal);
       const listKey = this.generateListKey(value.tag);
-      await this.client.lrem(listKey, 1, listVal);
+      await this.client.lrem(listKey, 0, listVal); // 0 will remove all occurrences of listVal
     }
   }
 
+  private async extendLocks(values: string[]) {
+    values = [...values];
+    for (const val of values) {
+      const listKey = this.generateListKey(this.decodeValue(val).tag);
+      const index = await this.client.lpos(listKey, val);
+      if (index === null) {
+        throw new Error(
+          `Error when trying to get lock which request got deleted when trying to extend lock`,
+        );
+      }
+      const value = this.decodeValue(val);
+      if (value.extensions < this.config.maxExtensions) {
+        value.date = Date.now();
+        value.extensions += 1;
+        values.splice(values.indexOf(val), 1, this.encodeValue(value));
+        await this.client.lset(listKey, index, this.encodeValue(value));
+      }
+    }
+    return values;
+  }
+
   private async getWriteLockWithPriority(tags: string[]) {
-    const values: string[] = [];
+    let values: string[] = [];
     for (const tag of tags) {
       const value = this.encodeValue({
         tag,
-        createdAt: Date.now(),
+        date: Date.now(),
         clientToken: randomUUID(),
+        extensions: 0,
       });
       await this.client.rpush(this.generateListKey(tag), value);
       values.push(value);
@@ -124,19 +154,37 @@ export class LockService
       if (!indexes.some((i) => i !== 0)) {
         break;
       }
-
-      // eslint-disable-next-line no-promise-executor-return
-      await new Promise((resolve) =>
-        setTimeout(resolve, this.config.lockAcquireInterval),
-      );
+      await sleep(this.config.lockAcquireInterval);
     }
 
+    values = await this.extendLocks(values);
+
+    const extender = setInterval(async () => {
+      try {
+        values = await this.extendLocks(values);
+      } catch (e) {
+        clearInterval(extender);
+      }
+    }, this.config.lockMaxTTL / 2);
+
     return {
-      remove: async () => this.deleteLocks(values),
+      release: () => {
+        clearInterval(extender);
+        return this.deleteLocks(values);
+      },
     };
   }
 
   public async onApplicationShutdown(): Promise<any> {
+    if (this.healthCheckIntervalId != null)
+      clearInterval(this.healthCheckIntervalId);
+
     return this.client.quit();
   }
+}
+
+async function sleep(milliseconds: number) {
+  await new Promise((resolve) => {
+    setTimeout(resolve, milliseconds);
+  });
 }
