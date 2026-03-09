@@ -10,14 +10,10 @@ export declare class LockService implements OnApplicationBootstrap, OnApplicatio
     constructor(config: ConfigType);
     onApplicationBootstrap(): any;
     auto<T>(lockTags: string | string[], cb: () => Promise<T>): Promise<T>;
-    private encodeValue;
-    private decodeValue;
-    private fetchIndexes;
-    private runHealthCheck;
-    private generateListKey;
-    private getAllLists;
+    runHealthCheck(): Promise<number>;
+    private generateQueueKey;
     private deleteLocks;
     private extendLocks;
-    private getWriteLockWithPriority;
+    private acquire;
     onApplicationShutdown(): Promise<any>;
 }

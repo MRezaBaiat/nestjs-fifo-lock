@@ -22,7 +22,7 @@
   ],
   "scripts": {
     "delete-dist": "rimraf dist",
-    "generate-dist": "yarn delete-dist && tsc --p ./tsconfig.json --declaration --declarationDir dist --outDir dist",
+    "generate-dist": "npm run delete-dist && tsc --p ./tsconfig.json --declaration --declarationDir dist --outDir dist",
     "test": "jest --runInBand"
   },
   "dependencies": {

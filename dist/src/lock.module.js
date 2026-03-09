@@ -10,7 +10,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.LockModule = void 0;
 const common_1 = require("@nestjs/common");
 const lock_service_1 = require("./lock.service");
-let LockModule = exports.LockModule = LockModule_1 = class LockModule {
+let LockModule = LockModule_1 = class LockModule {
     static register(config) {
         config.lockMaxTTL = config.lockMaxTTL || 60 * 1000;
         config.healthCheckInterval = config.healthCheckInterval || 60 * 1000;
@@ -70,6 +70,7 @@ let LockModule = exports.LockModule = LockModule_1 = class LockModule {
         throw new Error('Invalid LockModuleAsyncOptions');
     }
 };
+exports.LockModule = LockModule;
 exports.LockModule = LockModule = LockModule_1 = __decorate([
     (0, common_1.Global)(),
     (0, common_1.Module)({})

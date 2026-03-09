@@ -1,6 +1,6 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.UseLock = void 0;
+exports.UseLock = UseLock;
 function UseLock(lockTags) {
     return function (target, propertyKey, descriptor) {
         const { value } = descriptor;
@@ -14,4 +14,3 @@ function UseLock(lockTags) {
         return descriptor;
     };
 }
-exports.UseLock = UseLock;
