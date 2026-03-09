@@ -177,14 +177,20 @@ describe('LockService', () => {
 
     order.length = 0;
 
-    [[1], [1,2], [3]].map(async (i) =>
+    // collect promises so we can wait for them to finish to avoid background operations
+    const tasks = [[1], [1,2], [3]].map((i) =>
       service.auto(i.map(n => String(n)), async () => {
         order.push(i)
         await sleep(100)
       }),
     );
-    await sleep(100)
 
-    expect(order).toEqual([[1],[3]])
+    // give the first and the independent third task time to run, the middle one should be blocked
+    await sleep(120);
+
+    expect(order).toEqual([[1],[3]]);
+
+    // now wait for all tasks to finish before ending the test
+    await Promise.all(tasks);
   });
 });
