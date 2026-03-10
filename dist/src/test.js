@@ -18,7 +18,7 @@ async function test() {
     service
         .auto(['1', '2', '3'], async () => {
         console.log('1,2,3 locked');
-        await sleep(5000);
+        await sleep(50000);
         console.log('1,2,3 finished');
     })
         .catch(console.error);

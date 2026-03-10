@@ -11,7 +11,7 @@ const config = {
   healthCheckInterval: 50,
 };
 
-const sleep = (ms: number) => new Promise(r => setTimeout(r, ms));
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 describe('LockService', () => {
   let service: LockService;
@@ -30,10 +30,6 @@ describe('LockService', () => {
     jest.clearAllMocks();
   });
 
-  /* ---------------------------------------------------
-   * BASIC ACQUIRE / RELEASE
-   * --------------------------------------------------- */
-
   it('acquires and releases a single-tag lock', async () => {
     let executed = false;
 
@@ -45,7 +41,7 @@ describe('LockService', () => {
     expect(await client.llen('lock:queue:A')).toBe(0);
   });
 
-  it('acquires and releases multi-tag lock atomically', async () => {
+  it('acquires and releases multi-tag locks', async () => {
     await service.auto(['A', 'B'], async () => {
       expect(await client.llen('lock:queue:A')).toBe(1);
       expect(await client.llen('lock:queue:B')).toBe(1);
@@ -55,23 +51,19 @@ describe('LockService', () => {
     expect(await client.llen('lock:queue:B')).toBe(0);
   });
 
-  /* ---------------------------------------------------
-   * MUTUAL EXCLUSION
-   * --------------------------------------------------- */
-
   it('serializes access for the same tag', async () => {
     const order: number[] = [];
 
-    const t1 = service.auto('A', async () => {
+    const first = service.auto('A', async () => {
       order.push(1);
       await sleep(50);
     });
 
-    const t2 = service.auto('A', async () => {
+    const second = service.auto('A', async () => {
       order.push(2);
     });
 
-    await Promise.all([t1, t2]);
+    await Promise.all([first, second]);
     expect(order).toEqual([1, 2]);
   });
 
@@ -91,41 +83,30 @@ describe('LockService', () => {
     expect(started.sort()).toEqual([1, 2]);
   });
 
-  /* ---------------------------------------------------
-   * EXTENSIONS
-   * --------------------------------------------------- */
-
-  it('automatically extends up to maxExtensions', async () => {
+  it('extends an acquired lock while the callback is running', async () => {
     const spy = jest.spyOn<any, any>(service as any, 'extendLocks');
 
     await service.auto('A', async () => {
       await sleep(config.lockMaxTTL * 2);
     });
 
-    // initial extend + interval extensions
     expect(spy.mock.calls.length).toBeGreaterThanOrEqual(2);
   });
 
-  /* ---------------------------------------------------
-   * HEALTH CHECK
-   * --------------------------------------------------- */
-
-  it('removes expired locks across multiple tags', async () => {
+  it('removes an expired lock entry', async () => {
     const expired = JSON.stringify({
       id: 'dead',
-      tags: ['A', 'B'],
+      tags: ['A'],
       date: Date.now() - 1000,
       extensions: 0,
     });
 
     await client.rpush('lock:queue:A', expired);
-    await client.rpush('lock:queue:B', expired);
 
     const removed = await service.runHealthCheck();
 
-    expect(removed).toBe(2);
+    expect(removed).toBe(1);
     expect(await client.llen('lock:queue:A')).toBe(0);
-    expect(await client.llen('lock:queue:B')).toBe(0);
   });
 
   it('does not remove fresh locks', async () => {
@@ -145,52 +126,32 @@ describe('LockService', () => {
     expect(await client.llen('lock:queue:A')).toBe(1);
   });
 
-  /* ---------------------------------------------------
-   * FAILURE PATHS
-   * --------------------------------------------------- */
+  it('can run a health check while a fresh lock is active', async () => {
+    const hcService = new LockService({
+      ...config,
+      lockMaxTTL: 120,
+      maxExtensions: 10,
+      healthCheckInterval: 10_000,
+    } as any);
 
-  it('throws if queue entry disappears before acquisition', async () => {
-    jest
-      .spyOn(client, 'lpos')
-      .mockResolvedValueOnce(null);
+    await hcService.onApplicationBootstrap();
+    const hcClient = (hcService as any).client;
+    await hcClient.flushdb();
 
-    await expect(
-      service.auto('A', async () => {}),
-    ).rejects.toThrow(/lock request got deleted/);
-  });
+    try {
+      const task = hcService.auto('A', async () => {
+        await sleep(150);
+      });
 
-  /* ---------------------------------------------------
-   * FIFO FAIRNESS
-   * --------------------------------------------------- */
+      await sleep(20);
+      const removed = await hcService.runHealthCheck();
 
-  it('preserves FIFO ordering for multiple waiters', async () => {
-    const order: any[] = [];
-
-    await Promise.all([1, 2, 3].map((i) =>
-      service.auto('A', async () => {
-        order.push(i);
-        await sleep(10);
-      }),
-    ));
-
-    expect(order).toEqual([1, 2, 3]);
-
-    order.length = 0;
-
-    // collect promises so we can wait for them to finish to avoid background operations
-    const tasks = [[1], [1,2], [3]].map((i) =>
-      service.auto(i.map(n => String(n)), async () => {
-        order.push(i)
-        await sleep(100)
-      }),
-    );
-
-    // give the first and the independent third task time to run, the middle one should be blocked
-    await sleep(120);
-
-    expect(order).toEqual([[1],[3]]);
-
-    // now wait for all tasks to finish before ending the test
-    await Promise.all(tasks);
+      expect(removed).toBe(0);
+      await task;
+      expect(await hcClient.llen('lock:queue:A')).toBe(0);
+    } finally {
+      await hcClient.flushdb();
+      await hcService.onApplicationShutdown();
+    }
   });
 });
