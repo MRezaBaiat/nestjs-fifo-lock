@@ -154,4 +154,59 @@ describe('LockService', () => {
       await hcService.onApplicationShutdown();
     }
   });
+
+  it('waits correctly for a tag held by an extending multi-tag lock', async () => {
+    const waitService = new LockService({
+      ...config,
+      lockMaxTTL: 10_000,
+      healthCheckInterval: 10_000,
+      lockAcquireInterval: 50,
+      maxExtensions: 5,
+    } as any);
+
+    await waitService.onApplicationBootstrap();
+    const waitClient = (waitService as any).client;
+    await waitClient.flushdb();
+    const order: string[] = [];
+
+    try {
+      const holder = waitService.auto(['1', '2', '3'], async () => {
+        order.push('holder:start');
+        await sleep(1_500);
+        order.push('holder:end');
+      });
+
+      await sleep(10);
+
+      const waiter = waitService.auto(['1'], async () => {
+        order.push('waiter:start');
+        await sleep(10);
+        order.push('waiter:end');
+      });
+
+      const parallel = waitService.auto(['4'], async () => {
+        order.push('parallel:start');
+        await sleep(10);
+        order.push('parallel:end');
+      });
+
+      await Promise.all([holder, waiter, parallel]);
+
+      expect(order).toContain('holder:start');
+      expect(order).toContain('holder:end');
+      expect(order).toContain('waiter:start');
+      expect(order).toContain('waiter:end');
+      expect(order).toContain('parallel:start');
+      expect(order).toContain('parallel:end');
+      expect(order.indexOf('parallel:start')).toBeLessThan(
+        order.indexOf('holder:end'),
+      );
+      expect(order.indexOf('waiter:start')).toBeGreaterThan(
+        order.indexOf('holder:end'),
+      );
+    } finally {
+      await waitClient.flushdb();
+      await waitService.onApplicationShutdown();
+    }
+  });
 });

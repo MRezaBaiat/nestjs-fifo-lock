@@ -193,6 +193,31 @@ export class LockService
         }) : ${JSON.stringify(tags)}`,
       );
     }
+
+  }
+
+  public async listQueuedLocks(tags: string[]) {
+    return Promise.all(
+      tags.map(async (tag) => {
+        const key = this.generateQueueKey(tag);
+        const entries = await this.client.lrange(key, 0, -1);
+        return {
+          tag,
+          key,
+          entries: entries.map((entry, index) => {
+            const decoded = JSON.parse(entry) as QueueEntry;
+            return {
+              index,
+              id: decoded.id,
+              tags: decoded.tags,
+              date: decoded.date,
+              extensions: decoded.extensions,
+              decoded
+            };
+          }),
+        };
+      }),
+    );
   }
 
   private async acquire(tags: string[]) {
@@ -216,6 +241,8 @@ export class LockService
           this.client.lpos(this.generateQueueKey(tag), entryString),
         ),
       );
+     // const queuedLocks = await this.listQueuedLocks(tags);
+    //  console.log({ id, tags, indexes, queuedLocks });
 
       if (indexes.some((h) => h === null)) {
         throw new Error(
@@ -236,6 +263,7 @@ export class LockService
       try {
         await this.extendLocks(id, tags);
       } catch (e) {
+        console.log('Exceeded , Will not extend any more');
         clearInterval(extender);
       }
     }, (this.config.lockMaxTTL * 3) / 4);

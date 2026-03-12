@@ -5,7 +5,7 @@ const service = new LockService({
   redisPort: 6379,
   healthCheckInterval: 500,
   lockMaxTTL: 10000,
-  maxExtensions: 1,
+  maxExtensions: 3,
   lockAcquireInterval: 500,
 });
 service.onApplicationBootstrap();
