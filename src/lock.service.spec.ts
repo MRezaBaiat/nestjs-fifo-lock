@@ -13,6 +13,13 @@ const config = {
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
+function stopAutoHealthCheck(lockService: LockService) {
+  const intervalId = (lockService as any).healthCheckIntervalId;
+  if (intervalId != null) {
+    clearInterval(intervalId);
+  }
+}
+
 describe('LockService', () => {
   let service: LockService;
   let client: any;
@@ -20,6 +27,7 @@ describe('LockService', () => {
   beforeEach(async () => {
     service = new LockService(config as any);
     await service.onApplicationBootstrap();
+    stopAutoHealthCheck(service);
     client = (service as any).client;
     await client.flushdb();
   });
@@ -135,6 +143,7 @@ describe('LockService', () => {
     } as any);
 
     await hcService.onApplicationBootstrap();
+    stopAutoHealthCheck(hcService);
     const hcClient = (hcService as any).client;
     await hcClient.flushdb();
 
@@ -165,6 +174,7 @@ describe('LockService', () => {
     } as any);
 
     await waitService.onApplicationBootstrap();
+    stopAutoHealthCheck(waitService);
     const waitClient = (waitService as any).client;
     await waitClient.flushdb();
     const order: string[] = [];

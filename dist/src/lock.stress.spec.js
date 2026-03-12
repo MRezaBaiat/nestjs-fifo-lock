@@ -11,12 +11,19 @@ const baseConfig = {
     healthCheckInterval: 200,
 };
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+function stopAutoHealthCheck(lockService) {
+    const intervalId = lockService.healthCheckIntervalId;
+    if (intervalId != null) {
+        clearInterval(intervalId);
+    }
+}
 describe('LockService stress tests', () => {
     let service;
     let client;
     beforeEach(async () => {
         service = new lock_service_1.LockService(baseConfig);
         await service.onApplicationBootstrap();
+        stopAutoHealthCheck(service);
         client = service.client;
         await client.flushdb();
     });
@@ -41,6 +48,7 @@ describe('LockService stress tests', () => {
             maxExtensions: 10,
         });
         await secondService.onApplicationBootstrap();
+        stopAutoHealthCheck(secondService);
         const events = [];
         let overlapDetected = false;
         let active = false;

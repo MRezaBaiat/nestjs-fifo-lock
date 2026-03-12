@@ -132,6 +132,27 @@ let LockService = class LockService {
             throw new Error(`Error when trying to extend the lock , they seems to be deleted (${updatedCount} vs ${tags.length}) : ${JSON.stringify(tags)}`);
         }
     }
+    async listQueuedLocks(tags) {
+        return Promise.all(tags.map(async (tag) => {
+            const key = this.generateQueueKey(tag);
+            const entries = await this.client.lrange(key, 0, -1);
+            return {
+                tag,
+                key,
+                entries: entries.map((entry, index) => {
+                    const decoded = JSON.parse(entry);
+                    return {
+                        index,
+                        id: decoded.id,
+                        tags: decoded.tags,
+                        date: decoded.date,
+                        extensions: decoded.extensions,
+                        decoded
+                    };
+                }),
+            };
+        }));
+    }
     async acquire(tags) {
         const id = (0, crypto_1.randomUUID)();
         const entryString = JSON.stringify({
@@ -157,6 +178,7 @@ let LockService = class LockService {
                 await this.extendLocks(id, tags);
             }
             catch (e) {
+                console.log('Exceeded , Will not extend any more');
                 clearInterval(extender);
             }
         }, (this.config.lockMaxTTL * 3) / 4);

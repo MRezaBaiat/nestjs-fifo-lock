@@ -14,6 +14,11 @@ export declare class LockService implements OnApplicationBootstrap, OnApplicatio
     private generateQueueKey;
     private deleteLocks;
     private extendLocks;
+    listQueuedLocks(tags: string[]): Promise<{
+        tag: string;
+        key: string;
+        entries: any;
+    }[]>;
     private acquire;
     onApplicationShutdown(): Promise<any>;
 }
