@@ -21,6 +21,7 @@ let LockService = class LockService {
         this.client = new ioredis_1.default({
             host: config.redisHost,
             port: +config.redisPort,
+            ...(config.redisSsl ? { tls: {} } : {}),
         });
     }
     onApplicationBootstrap() {

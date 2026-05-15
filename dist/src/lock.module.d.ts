@@ -3,6 +3,7 @@ import { ModuleMetadata } from '@nestjs/common/interfaces/modules/module-metadat
 export interface ConfigType {
     redisHost: string;
     redisPort: string | number;
+    redisSsl?: boolean;
     lockMaxTTL?: number;
     healthCheckInterval?: number;
     lockAcquireInterval?: number;
