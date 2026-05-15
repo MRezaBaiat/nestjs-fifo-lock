@@ -20,6 +20,7 @@ imports:[{
   LockModule.register({
     redisHost: 'localhost',
     redisPort: 6379,
+    redisSsl: false,
     lockMaxTTL: 60000,
     healthCheckInterval: 60000,
     lockAcquireInterval: 500,
@@ -65,6 +66,7 @@ Please note if using on multiple server instances connected to the same redis in
 |---------------------|---------------------------------------------|------------------------------------------------------------------------------|
 | redisHost           | required                                    | Redis's address                                                              |
 | redisPort           | required                                    | Redis's port                                                                 |
+| redisSsl            | optional                                    | Whether to use TLS/SSL when connecting to Redis                              |
 | lockMaxTTL          | optional , defaulted to 600000 milliseconds | The time it takes before the internal healthcheck's sweeper deletes the lock |
 | healthCheckInterval | optional, defaulted to 600000 milliseconds  | The interval for how often the healthcheck should run                        |
 | lockAcquireInterval | [ optional , default to 500 milliseconds    | The interval for how often a lock in queue should check to see if it's turn  |
