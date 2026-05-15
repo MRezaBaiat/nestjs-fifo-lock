@@ -32,6 +32,7 @@ export class LockService
     this.client = new Client({
       host: config.redisHost,
       port: +config.redisPort,
+      ...(config.redisSsl ? { tls: {} } : {}),
     });
   }
 
