@@ -73,7 +73,8 @@ export class LockService
     this.debugLog('Requesting auto lock block', { tags });
     const start = performance.now();
     const { release } = await this.acquire(tags);
-    this.debugLog(`Took ${performance.now() - start}ms to acquire lock for`,{ tags });
+    const duration = performance.now() - start;
+    this.debugLog(`Took ${duration.toFixed(0)}ms to acquire lock for`, { tags });
     try {
       return await cb();
     } finally {

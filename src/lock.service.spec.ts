@@ -164,6 +164,132 @@ describe('LockService', () => {
     }
   });
 
+  it('releases the lock safely even if the callback throws an error', async () => {
+    // Attempt to run a callback that crashes
+    await expect(
+      service.auto('A', async () => {
+        throw new Error('Something went terribly wrong!');
+      }),
+    ).rejects.toThrow('Something went terribly wrong!');
+
+    // The finally block should have executed and cleared the lock
+    expect(await client.llen('lock:queue:A')).toBe(0);
+  });
+
+  it('correctly lists queued locks and decodes their payloads', async () => {
+    let resolveFirst: any;
+
+    // 1. Lock 1 acquires
+    const first = service.auto(
+      'A',
+      () =>
+        new Promise((r) => {
+          resolveFirst = r;
+        }),
+    );
+
+    // Wait for Lock 1 to hit the database and acquire
+    await sleep(20);
+
+    // 2. Lock 2 queues up and starts waiting (callback won't fire yet)
+    const second = service.auto('A', async () => {
+      return 'done';
+    });
+
+    // Wait for Lock 2 to hit the queue
+    await sleep(20);
+
+    // Check the queue
+    const queueList = await service.listQueuedLocks(['A']);
+
+    expect(queueList).toHaveLength(1);
+    expect(queueList[0].tag).toBe('A');
+    expect(queueList[0].entries).toHaveLength(2);
+
+    // Verify payload decoding
+    expect(queueList[0].entries[0].index).toBe(0);
+    expect(queueList[0].entries[0].tags).toEqual(['A']);
+    expect(queueList[0].entries[1].index).toBe(1);
+
+    // Clean up: Resolving the first lock will allow the second to acquire and finish!
+    resolveFirst();
+    await first;
+    await second;
+  });
+
+  it('throws an error if a waiting lock request is deleted from the queue', async () => {
+    let resolveFirst: any;
+
+    // 1. First lock acquires and holds
+    const first = service.auto(
+      'A',
+      () =>
+        new Promise((r) => {
+          resolveFirst = r;
+        }),
+    );
+    await sleep(20);
+
+    // 2. Second lock queues up and starts waiting
+    const second = service.auto('A', async () => {
+      // Should never reach here
+    });
+    await sleep(20);
+
+    // 3. Sabotage! Manually delete the second lock's entry from the Redis queue
+    await client.rpop('lock:queue:A');
+
+    // 4. Catch the rejection so the test passes cleanly
+    try {
+      await second;
+      // If it doesn't throw, manually fail the test
+      expect(true).toBe(false);
+    } catch (error: any) {
+      expect(error.message).toMatch(
+        /lock request got deleted before acquiring/,
+      );
+    }
+
+    // Give the while(true) loop time to fully terminate before Jest shuts down Redis
+    await sleep(50);
+
+    // Clean up
+    resolveFirst();
+    await first;
+  });
+
+  it('throws an error if a waiting lock request is deleted from the queue', async () => {
+    let resolveFirst: any;
+
+    // 1. First lock acquires and holds
+    const first = service.auto(
+      'A',
+      () =>
+        new Promise((r) => {
+          resolveFirst = r;
+        }),
+    );
+    await sleep(20);
+
+    // 2. Second lock queues up and starts waiting
+    const second = service.auto('A', async () => {
+      // Should never reach here
+    });
+    await sleep(20);
+
+    // 3. Sabotage! Manually delete the second lock's entry from the Redis queue
+    await client.rpop('lock:queue:A');
+
+    // 4. Verify it throws the exact safety error
+    await expect(second).rejects.toThrow(
+      /lock request got deleted before acquiring/,
+    );
+
+    // Clean up
+    resolveFirst();
+    await first;
+  });
+
   it('waits correctly for a tag held by an extending multi-tag lock', async () => {
     const waitService = new LockService({
       ...config,
