@@ -8,6 +8,7 @@ export interface ConfigType {
     healthCheckInterval?: number;
     lockAcquireInterval?: number;
     maxExtensions?: number;
+    debug?: boolean;
 }
 export interface LockOptionsFactory {
     createLockOptions(): Promise<ConfigType> | ConfigType;

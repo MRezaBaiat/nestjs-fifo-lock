@@ -7,7 +7,9 @@ export declare class LockService implements OnApplicationBootstrap, OnApplicatio
     private config;
     private readonly client;
     private healthCheckIntervalId;
+    private readonly logger;
     constructor(config: ConfigType);
+    private debugLog;
     onApplicationBootstrap(): any;
     auto<T>(lockTags: string | string[], cb: () => Promise<T>): Promise<T>;
     runHealthCheck(): Promise<number>;

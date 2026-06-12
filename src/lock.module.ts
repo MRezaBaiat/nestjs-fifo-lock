@@ -10,6 +10,7 @@ export interface ConfigType {
   healthCheckInterval?: number;
   lockAcquireInterval?: number;
   maxExtensions?: number;
+  debug?: boolean
 }
 
 export interface LockOptionsFactory {
@@ -28,10 +29,11 @@ export interface LockModuleAsyncOptions {
 @Module({})
 export class LockModule {
   static register(config: ConfigType): DynamicModule {
-    config.lockMaxTTL = config.lockMaxTTL || 60 * 1000;
-    config.healthCheckInterval = config.healthCheckInterval || 60 * 1000;
-    config.lockAcquireInterval = config.lockAcquireInterval || 500;
-    config.maxExtensions = config.maxExtensions || 5;
+    config.lockMaxTTL ??=60 * 1000;
+    config.healthCheckInterval ??= 60 * 1000;
+    config.lockAcquireInterval ??= 500;
+    config.maxExtensions ??= 5;
+    config.debug ??= false;
     return {
       global: true,
       imports: [],

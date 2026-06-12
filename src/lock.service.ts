@@ -2,6 +2,7 @@ import {
   OnApplicationShutdown,
   Injectable,
   OnApplicationBootstrap,
+  Logger,
 } from '@nestjs/common';
 import Client from 'ioredis';
 import { randomUUID } from 'crypto';
@@ -26,6 +27,7 @@ export class LockService
 {
   private readonly client;
   private healthCheckIntervalId;
+  private readonly logger = new Logger(LockService.name);
 
   constructor(private config: ConfigType) {
     global.lockService = this;
@@ -34,6 +36,17 @@ export class LockService
       port: +config.redisPort,
       ...(config.redisSsl ? { tls: {} } : {}),
     });
+    this.debugLog('Initialized Redis client for LockService');
+  }
+
+  /**
+   * Helper method to output logs only when DEBUG=true is set in the environment.
+   */
+  private debugLog(message: string, meta?: Record<string, any>) {
+    if (this.config.debug) {
+      const metaString = meta ? ` | Meta: ${JSON.stringify(meta)}` : '';
+      this.logger.debug(`${message}${metaString}`);
+    }
   }
 
   onApplicationBootstrap(): any {
@@ -42,6 +55,7 @@ export class LockService
       this.config.healthCheckInterval,
     );
     this.runHealthCheck();
+    this.debugLog('Application bootstrapped. Health check interval started.');
   }
 
   public async auto<T>(
@@ -56,8 +70,10 @@ export class LockService
         : [String(lockTags)],
     );
 
+    this.debugLog('Requesting auto lock block', { tags });
+    const start = performance.now();
     const { release } = await this.acquire(tags);
-
+    this.debugLog(`Took ${performance.now() - start}ms to acquire lock for`,{ tags });
     try {
       return await cb();
     } finally {
@@ -66,6 +82,7 @@ export class LockService
   }
 
   async runHealthCheck() {
+    this.debugLog('Running lock health check (cleaning stale locks)...');
     let cursor = '0';
     const batchSize = 100;
     const now = Date.now();
@@ -113,6 +130,10 @@ export class LockService
       }
     } while (cursor !== '0');
 
+    if (totalRemoved > 0) {
+      this.debugLog('Health check removed stale locks', { totalRemoved });
+    }
+
     return totalRemoved;
   }
 
@@ -121,6 +142,8 @@ export class LockService
   }
 
   private async deleteLocks(id: string, tags: string[]) {
+    this.debugLog('Releasing locks', { id, tags });
+
     const luaScript = `
     local removed = 0
     for i, key in ipairs(KEYS) do
@@ -146,11 +169,14 @@ export class LockService
       ...tags.map((t) => this.generateQueueKey(t)),
       id,
     );
+
+    this.debugLog('Locks successfully released', { id, removedCount });
     return removedCount as number;
   }
 
   private async extendLocks(id: string, tags: string[]) {
     const now = Date.now();
+    this.debugLog('Attempting to extend locks', { id, tags });
 
     const luaScript = `
         local updated = 0
@@ -188,6 +214,11 @@ export class LockService
     );
 
     if (updatedCount !== tags.length) {
+      this.logger.error(
+        `Error when trying to extend the lock, they seem to be deleted (${updatedCount} vs ${
+          tags.length
+        }): ${JSON.stringify(tags)}`,
+      );
       throw new Error(
         `Error when trying to extend the lock , they seems to be deleted (${updatedCount} vs ${
           tags.length
@@ -195,6 +226,7 @@ export class LockService
       );
     }
 
+    this.debugLog('Locks successfully extended', { id, updatedCount });
   }
 
   public async listQueuedLocks(tags: string[]) {
@@ -213,7 +245,7 @@ export class LockService
               tags: decoded.tags,
               date: decoded.date,
               extensions: decoded.extensions,
-              decoded
+              decoded,
             };
           }),
         };
@@ -230,29 +262,43 @@ export class LockService
       extensions: 0,
     } as QueueEntry);
 
+    this.debugLog('Queueing for lock acquisition', { id, tags });
+
     await Promise.all(
       tags.map(async (tag) =>
         this.client.rpush(this.generateQueueKey(tag), entryString),
       ),
     );
 
+    let waitCycles = 0;
     while (true) {
       const indexes = await Promise.all(
         tags.map(async (tag) =>
           this.client.lpos(this.generateQueueKey(tag), entryString),
         ),
       );
-     // const queuedLocks = await this.listQueuedLocks(tags);
-    //  console.log({ id, tags, indexes, queuedLocks });
 
       if (indexes.some((h) => h === null)) {
+        this.logger.error(
+          `Lock request got deleted before acquiring for tags: ${tags}`,
+        );
         throw new Error(
           `Error when trying to get locks for ${tags} , lock request got deleted before acquiring`,
         );
       }
 
       if (indexes.every((value) => value === 0)) {
+        this.debugLog('Lock successfully acquired', { id, tags, waitCycles });
         break;
+      }
+
+      waitCycles++;
+      // Optional: Log every 10 cycles to avoid spamming the console while waiting
+      if (waitCycles % 10 === 0) {
+        this.debugLog('Still waiting in queue to acquire lock', {
+          id,
+          indexes,
+        });
       }
 
       await sleep(this.config.lockAcquireInterval);
@@ -264,13 +310,16 @@ export class LockService
       try {
         await this.extendLocks(id, tags);
       } catch (e) {
-        console.log('Exceeded , Will not extend any more');
+        this.logger.warn(
+          `Max extensions exceeded for lock ${id}. Will not extend anymore.`,
+        );
         clearInterval(extender);
       }
     }, (this.config.lockMaxTTL * 3) / 4);
 
     return {
       release: () => {
+        this.debugLog('Clearing lock extender interval', { id });
         clearInterval(extender);
         return this.deleteLocks(id, tags);
       },
@@ -278,6 +327,9 @@ export class LockService
   }
 
   public async onApplicationShutdown(): Promise<any> {
+    this.debugLog(
+      'Shutting down LockService, clearing intervals and quitting Redis',
+    );
     if (this.healthCheckIntervalId != null)
       clearInterval(this.healthCheckIntervalId);
 

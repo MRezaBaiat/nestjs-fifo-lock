@@ -12,10 +12,11 @@ const common_1 = require("@nestjs/common");
 const lock_service_1 = require("./lock.service");
 let LockModule = LockModule_1 = class LockModule {
     static register(config) {
-        config.lockMaxTTL = config.lockMaxTTL || 60 * 1000;
-        config.healthCheckInterval = config.healthCheckInterval || 60 * 1000;
-        config.lockAcquireInterval = config.lockAcquireInterval || 500;
-        config.maxExtensions = config.maxExtensions || 5;
+        config.lockMaxTTL ??= 60 * 1000;
+        config.healthCheckInterval ??= 60 * 1000;
+        config.lockAcquireInterval ??= 500;
+        config.maxExtensions ??= 5;
+        config.debug ??= false;
         return {
             global: true,
             imports: [],
